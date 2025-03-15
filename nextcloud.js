@@ -282,13 +282,29 @@ module.exports = function (RED) {
         option.agent = new https.Agent({ rejectUnauthorized: false })
       }
 
-      client.putFileContents(directory + name, file, { format: 'binary' }, option)
+      client.putFileContents(directory + name, file, { format: 'binary' })
         .then(function (contents) {
-          console.log(contents)
-          node.send({ 'payload': JSON.parse(contents) })
-        }, function () {
-          node.error('Nextcloud:WebDAV -> send file went wrong.')
+          if (contents && contents?.status === 204) {
+            payload = {
+              message: 'File uploaded successfully.',
+              statuscode: contents?.status,
+              url: contents?.url
+            };
+            node.send({ 'payload':  payload});
+          } else {
+            try {
+              // Trying to parse the response
+              node.send({ 'payload': JSON.parse(contents) });
+            } catch (e) {
+              // It is not valid json, parsing breaks
+              console.log('Response is not JSON:', contents);
+              node.send({ 'payload': contents });
+            }
+          }
         })
+        .catch(function () {
+          node.error('Nextcloud:WebDAV -> send file went wrong.');
+        });
     })
   }
   RED.nodes.registerType('nextcloud-webdav-in', NextcloudWebDavIn)
